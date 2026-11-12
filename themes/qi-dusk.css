@@ -1,0 +1,546 @@
+/* ============================================================
+   主题：柒·残月都市（qi-dusk，亮暗通用）
+   风格：银发红瞳「柒」× 废土月夜都市 —— 全窗背景画 + 半透明装甲面板
+        + 暗面板消息卡 + 绯红点缀。构图语言参考竞品皮肤的：
+        左右双立绘 / 斜切角面板 / 红色装甲线
+   ============================================================
+   分层（自下而上）：
+     body::before = 全窗背景画（都市+月亮+左右双立绘；征用壁纸层空壳，
+                    ownsBackground 接管壁纸，卸载自动还原）
+     标题栏/侧栏  = 半透明黑壳（侧栏另加渐晕沉底保文字）
+     内容卡       = 半透明黑壳（人物透过壳呈鬼影，无任何盒状裁切）
+                    亮档壳降到 0.28 后在壳下再垫 10% 黑做正文对比地板
+     消息卡       = 助手＝暗面板（比壳亮半档），用户＝绯红实底
+   素材：themes/img/qi-dusk-*.webp（共 696KB；原始 PNG 底稿保留在
+   F:\视频项目\吉祥物\主题素材，调整素材后用 tmp/convert-qi-dusk-assets.cjs
+   重新转换：right 高 1600 / left 高 1200 / 其余原尺寸，q88 alpha95）。
+   ============================================================ */
+
+/* ---------- 背景画布：征用 body::before（壁纸层的空壳） ----------
+   ownsBackground 时宿主清空 --wallpaper-image 并摘掉 wallpaper-loaded
+   （theme-runtime.ts:204），body::before 处于空闲（基础样式 opacity:0），
+   本主题征用它做全窗画布。为什么不写在 html 上用 attachment:fixed：
+   三张大图 fixed 会让 Chromium 合成器放弃缓存、滚动全页重绘
+   （实测截图管线都超时）；body::before 本身是 position:fixed 元素，
+   天然视口锚定、可被合成器缓存，语义与壁纸层完全一致。
+   两张立绘与城市同层：人物成为背景画的一部分，由上方各面板的半透明
+   暗壳统一压暗——
+   - 左立绘曾挂 .global-sidebar：被侧栏 overflow-hidden 裁切，脸劈在栏缘上；
+   - 右立绘曾挂 .content-card + 盒状渐罩：渐罩与图同框，矩形亮度台阶藏不住。
+   都在背景层后人物不被任何面板边界裁断，壳下亮度自然衔接。锚定
+   left/right bottom（原图下缘截断，贴角才不突兀）；88% 随视口等比。
+   卸载：removeTheme 还原壁纸变量，本规则随 data-theme 摘除，互不残留。
+   素材按设计原亮度呈现；若将来整体压暗，人物与城市必须一起压。 */
+html[data-theme="qi-dusk"] body::before {
+  opacity: 1;
+  background:
+    url("img/qi-dusk-right.webp") right bottom / auto 71.3% no-repeat,
+    /* 右下背板：给坐姿「手掌撑地」垫一块地面+湿地反光（素材自带对角 alpha
+       渐隐，左上透明让城市透出）。比人物大一档（81% vs 71.3%，比例
+       100:88 维持不变）：地面铺得更宽、与城市的接缝更远更柔和，
+       掌心仍落在湿地上。整体缩放时两个百分比同步乘同一系数。 */
+    url("img/qi-dusk-right-bg.webp") right bottom / auto 81% no-repeat,
+    url("img/qi-dusk-left.webp") left bottom / auto 88% no-repeat,
+    url("img/qi-dusk-bg.webp") center / cover no-repeat;
+  /* 底兜单独立长写：var() 写进 background 简写的最后一层色会整条声明
+     延后到 computed-value 才判合法性，没必要冒这个险 */
+  background-color: var(--qd-base);
+}
+
+/* ---------- token 全集（原 html 块：只放变量，背景画布已移到 body::before） ---------- */
+html[data-theme="qi-dusk"] {
+  /* ---- 私有变量 ---- */
+  --qd-base: #0d0b0e;                      /* 页面底黑（背景图未加载时兜底，亦作 app-backdrop） */
+  /* 壳层透明度是亮暗的唯一分档：同一套「暗底亮字」体系，亮档只是把面板壳
+     调得更透、让背景画更多透出（亮档 0.28 用户实测）；其余 token/元素规则
+     亮暗完全共用，亮暗切换走系统 html.dark 机制（--gd-* 亮暗自动换挡） */
+  --qd-shell: rgba(17, 15, 19, 0.68);      /* 暗档：侧栏/内容卡装甲壳 */
+  /* 亮档正文的可读性地板：壳降到 0.28 后，背景画亮区（月亮/立绘高光）会把
+     裸壳上的文字压到不达标。实测（1440x900 取样真实素材，见 tmp/qd-real-bg.cjs）：
+     左侧正文列 x<980 处低于 4.5:1 的像素 13.2%，垫 10% 黑后 9.7%。
+     这是「缓解」不是「修好」——素材亮区原始亮度到 1.0，任何透明度方案
+     都救不回月亮本体（最差 1.55:1），要彻底达标必须压素材亮区或让文字上面板 */
+  --qd-content-veil: none;
+  --qd-sidebar-bg: rgba(15, 13, 17, 0.74);  /* 暗档：侧栏底（比壳实一点） */
+  --qd-sidebar-veil: linear-gradient(180deg,
+    rgba(15, 13, 17, 0.35) 0%,
+    rgba(15, 13, 17, 0.58) 52%,
+    rgba(15, 13, 17, 0.88) 100%); /* 暗档：侧栏渐晕 */
+  --qd-titlebar-bg: rgba(11, 10, 13, 0.84); /* 暗档：标题栏底 */
+  --qd-panel: rgba(20, 18, 23, 0.92);      /* 输入坞/浮层（更实一点） */
+  --qd-red: #b13440;                       /* 绯红主色（立绘瞳色一族） */
+  --qd-red-bright: #d24a52;                /* 亮红：暗底文字 / 悬停 / 标识块 */
+  --qd-red-deep: #8e2a31;                  /* 实底深红：用户气泡 / 按压态 */
+  --qd-red-dim: rgba(210, 74, 82, 0.3);    /* 装甲描线（红晕 hairline） */
+  --qd-line: rgba(255, 255, 255, 0.09);    /* 中性缝线 */
+  --qd-term: #0e0c10;                      /* 终端黑 */
+
+  /* ---- 主色与绯红色阶 ----
+     基础 token 的 primary-50…950 是 oklch 粉系，被 primary-100（下拉选中行等
+     11 处）/primary-200（9 处）直接消费；不换阶的话暗面板上会浮出粉色块 */
+  --gd-color-primary-50: #fdf3f4;
+  --gd-color-primary-100: #fadde0;
+  --gd-color-primary-200: #f4bfc4;
+  --gd-color-primary-300: #ec9aa2;
+  --gd-color-primary-400: #e0717c;
+  --gd-color-primary-500: #cf4f5c;
+  --gd-color-primary-600: #b13440;
+  --gd-color-primary-700: #a72c38;
+  --gd-color-primary-800: #8e2531;
+  --gd-color-primary-900: #741f29;
+  --gd-color-primary-950: #4d151c;
+
+  --gd-color-primary: var(--qd-red);
+  --gd-color-primary-hover: #c2454f;
+  --gd-color-primary-active: var(--qd-red-deep);
+  --gd-color-primary-text: #ffffff;
+  --gd-color-secondary: #565c66;
+  --gd-color-secondary-hover: #646b76;
+  --gd-color-secondary-active: #484e57;
+  --gd-color-secondary-text: #ffffff;
+
+  /* ---- 暗壳上的文本 ---- */
+  --gd-color-text: #d6d3d0;
+  --gd-color-text-gray: #a29c9e;
+  --gd-color-text-disabled: #6e686c;
+
+  /* 背景 token 给半透明色：内容卡（.content-clear-wallpaper）与侧栏
+     （.sidebar-transparent-bg）直接透出 html 的全窗背景——这正是本主题的骨架。
+     用户另设壁纸透明度时 --content-opacity 会再往透明混一档，属可接受叠加 */
+  --gd-color-bg: var(--qd-shell);
+  --gd-color-surface: var(--qd-panel);
+  --gd-color-border: var(--qd-line);
+  --gd-color-surface-border: rgba(255, 255, 255, 0.08);
+  --gd-color-app-backdrop: var(--qd-base);
+
+  /* ---- 侧栏 ---- */
+  --gd-color-sidebar-bg: var(--qd-sidebar-bg);
+  --gd-color-sidebar-bg-hover: rgba(40, 36, 43, 0.85);
+  --gd-color-sidebar-bg-active: var(--qd-red-deep);
+  --gd-color-sidebar-text: #d6d3d0;
+  --gd-color-sidebar-text-hover: #f0eeec;
+  --gd-color-sidebar-text-active: #ffffff;
+
+  /* ---- 标题栏：近黑 + 红晕下沿线（暗色模式，无 titlebar 亮度约束） ---- */
+  --gd-color-titlebar-bg: var(--qd-titlebar-bg);
+  --gd-color-titlebar-border: var(--qd-red-dim);
+  --gd-titlebar-text-color: #d6d3d0;
+  --gd-titlebar-hover-bg: rgba(46, 41, 49, 0.9);
+
+  /* ---- 会话列表 ---- */
+  --gd-color-conversation-bg: transparent;
+  --gd-color-conversation-text: #c9c5c2;
+  --gd-color-conversation-border: transparent;
+  --gd-color-conversation-bg-active: rgba(142, 42, 49, 0.85);
+  --gd-color-conversation-text-active: #ffffff;
+  --gd-color-conversation-bg-hover: rgba(255, 255, 255, 0.06);
+  --gd-color-conversation-text-hover: #f0eeec;
+
+  /* ---- 消息气泡：暗面板 × 绯红 ----
+     助手卡曾是参考图式的「白纸卡」，实测在整片暗壳 + 暗背景里是唯一的大面积
+     亮块，暗色模式下过于突兀——改用比壳亮半档的暗面板，靠切角与描边立形；
+     绯红只留在用户气泡 / 主按钮 / 危险件（与全主题的红色配给一致）。 */
+  --gd-color-bubble-user-bg: var(--qd-red-deep);
+  --gd-color-bubble-user-text: #ffffff;
+  --gd-color-bubble-user-border: rgba(0, 0, 0, 0.45);
+  --gd-color-bubble-assitant-bg: rgba(30, 27, 33, 0.86);
+  --gd-color-bubble-assitant-text: #d6d3d0;
+  --gd-color-bubble-assitant-border: rgba(255, 255, 255, 0.07);
+  --gd-color-bubble-assitant-text-strong: #dd5a62;
+
+  /* ---- 输入坞 / 表单 ---- */
+  --gd-color-input-bg: rgba(16, 14, 18, 0.93);
+  --gd-color-input-border: var(--qd-red-dim);
+  --gd-color-field-option-bg-selected: rgba(177, 52, 64, 0.32);
+
+  /* ---- 浮层 ---- */
+  --gd-color-overlay-bg: rgba(20, 18, 23, 0.96);
+  --gd-color-dialog-bg: #161318;
+  --gd-color-dialog-border: rgba(210, 74, 82, 0.22);
+
+  /* ---- Markdown：暗面板排版 + 暗终端块 ----
+     md 文本类 token 以暗面板（≈#1e1b20）为底校准；正文继承气泡文字色不走这里。
+     fill-tertiary（终端黑）继续供代码块用，与面板同族但更沉一档 */
+  --gd-code-block-bg: var(--qd-term);
+  --gd-md-fill-tertiary: var(--qd-term);
+  --gd-md-text-secondary: #a29c9e;        /* 暗面板上 6.7:1 */
+  --gd-md-text-tertiary: #8d878c;         /* h6/占位 4.9:1 */
+  --gd-md-accent: #dd5a62;                /* 链接/引用条：4.5:1 */
+  --gd-md-fill-secondary: rgba(255, 255, 255, 0.07);  /* 表头灰带 */
+  --gd-md-border: rgba(255, 255, 255, 0.10);
+  --gd-md-divider: rgba(255, 255, 255, 0.08);
+  --gd-md-scrollbar-thumb: rgba(210, 74, 82, 0.45);
+  --gd-md-radius: 3px;
+  --gd-md-inline-code-radius: 2px;
+  --gd-md-code-header-text: #dd5a62;
+
+  /* 语法高亮：终端黑 #0e0c10 上的暖调 */
+  --gd-md-syntax-text: #d8d4d0;
+  --gd-md-syntax-comment: #7a747a;
+  --gd-md-syntax-keyword: #e0656e;
+  --gd-md-syntax-string: #c9a25e;
+  --gd-md-syntax-number: #cf8a54;
+  --gd-md-syntax-function: #e8e2da;
+  --gd-md-syntax-type: #9fb0c4;
+  --gd-md-syntax-property: #c98b8b;
+  --gd-md-syntax-tag: #e0656e;
+  --gd-md-syntax-punctuation: #8d878c;
+
+  /* ---- 语义色（暗壳上提亮方向） ---- */
+  --gd-color-success: #4fae7c;
+  --gd-color-warning: #d9a13f;
+  --gd-color-danger: #e0565e;
+  --gd-color-danger-text: #ffffff;
+
+  /* ---- 几何：利落切角，拒绝圆胖 ---- */
+  --gd-size-surface-radius: 2px;
+  --gd-size-rounded-radius: 3px;
+  --gd-size-dialog-rounded-radius: 4px;
+  --gd-size-overview-panel-radius: 4px;
+  --gd-layout-card-radius: 0px;
+
+  /* ---- 布局缝归零：满铺贴边 ----
+     默认主题的 4px 布局缝是给「悬浮圆角卡片」用的，缝里透出的是 html 背景
+     的【原亮度】——面板底下的图都被半透明黑壳压暗了，唯独缝上没有壳，
+     在本主题里会显形成一圈亮边（月亮/天空的中亮度像素）。
+     归零后内容卡与窗缘/侧栏齐平（参考图的面板本来就是满铺的），
+     卡片轮廓由 ::after 的 1px 描边环负责。高度 calc 侧 round(up, 0, dpr)=0，
+     不影响 style.css 的「底部半行泄漏」设备像素对齐机制。 */
+  --gd-layout-card-gap: 0px;
+  --gd-layout-card-shadow: none;
+}
+
+/* ============================================================
+   亮暗换挡 token 锁档
+   style.css 的 :root / html.dark 两份定义里，这些 token 亮暗会换值。
+   本主题是「暗底亮字」体系（亮档只减壳透明度、不换底色的明度方向），
+   所以凡是不 pin 就会在亮档翻成浅色系值的，一律显式锁回暗档口径。
+   权重上不用担心：主题 CSS 由 theme-runtime 追加到 head 末尾，
+   html[data-theme]（0,1,1）与 html.dark（0,1,1）同权重、后来者胜，
+   两档都能盖住——问题只在于「压根没声明」，没声明的就跟着基础 token 换挡。
+   （已核对：下面每条在前端都有真实引用，无引用的 gray 阶不列。）
+   ============================================================ */
+html[data-theme="qi-dusk"] {
+  /* ---- 禁用态：亮档原本走 primary-200，而本主题把 200 阶改成了淡粉
+         #f4bfc4，配白字只有 1.60:1；secondary-disabled 同理派生自没换过的
+         冷蓝 secondary-200。锁回暗档的深红/深板岩 ---- */
+  --gd-color-primary-disabled: oklch(45% 0.08 355);
+  --gd-color-primary-text-disabled: rgba(255, 255, 255, 0.5);
+  --gd-color-secondary-disabled: oklch(35% 0.04 240);
+  --gd-color-secondary-text-disabled: rgba(229, 231, 235, 0.5);
+
+  /* ---- 骨架屏：亮档 #606266/#c0c4cc 在暗壳上是「暗块跳暗底、高光反而发灰」，
+         思考流/子代理行/工作流行都吃这两个（TurnItem 等 4 处） ---- */
+  --gd-shimmer-base: #a8aab3;
+  --gd-shimmer-highlight: #ffffff;
+
+  /* ---- 弹窗投影：亮档 16px/0.08 在近黑壳上几乎看不出浮起，锁暗档的 32px/0.4 ---- */
+  --gd-dialog-shadow: 0 0 10px rgba(0, 0, 0, 0.1), 0 8px 32px rgba(0, 0, 0, 0.4);
+
+  /* ---- hover/弱表面反馈：亮档混合比例普遍比暗档低一档（7% vs 10%、5.5% vs 12%），
+         在暗壳上等于「点了没反应」。这几条走 --gd-color-text/--gd-color-surface
+         派生（已被主题 pin），只需把比例锁成暗档值 ---- */
+  --gd-color-surface-subtle: color-mix(in srgb, var(--gd-color-text) 6.8%, var(--gd-color-surface));
+  --gd-color-surface-subtle-hover: color-mix(in srgb, var(--gd-color-text) 12%, var(--gd-color-surface));
+  --gd-color-field-bg-hover: color-mix(in srgb, var(--gd-color-text) 10%, var(--gd-color-surface));
+  --gd-color-field-option-bg-hover: color-mix(in srgb, var(--gd-color-text) 12%, var(--gd-color-surface));
+  --gd-plugin-icon-tray-border: color-mix(in srgb, var(--gd-color-text) 18%, var(--gd-color-surface));
+}
+
+/* 内容卡：亮档壳下的可读性底衬（见 --qd-content-veil）
+   background-image 画在 background-color 之上、内容之下，正好叠在壳色层上；
+   用户调低内容透明度时壳更透、底衬仍保持，作为正文对比度的地板。 */
+html[data-theme="qi-dusk"] .content-card {
+  background-image: var(--qd-content-veil);
+}
+
+/* ============================================================
+   背景（壁纸变量）由 ownsBackground 接管：宿主在 theme-runtime.ts:204
+   暂存并清空 --wallpaper-image / wallpaper-loaded，本主题不碰壁纸层，
+   卸载时自动还原用户壁纸。
+   ============================================================ */
+
+/* ---------- 侧栏：只负责压暗，不再承载立绘 ----------
+   立绘已上移到 html 背景层（见上）。侧栏保留暗壳底色 + 自上而下渐沉的
+   渐晕：头部区域可见、会话列表区沉底保文字可读。 */
+html[data-theme="qi-dusk"] .global-sidebar {
+  border-right: 1px solid var(--qd-line);
+  /* 渐晕亮暗分档：暗档沉底保列表可读，亮档更浅（--qd-sidebar-veil 覆盖）。
+     变量在主块恒有定义，不留 inline fallback——重复的那段渐变以前是死代码 */
+  background-image: var(--qd-sidebar-veil);
+}
+
+/* ---------- 标题栏：红晕下沿线 ---------- */
+html[data-theme="qi-dusk"] .custom-titlebar {
+  border-bottom: 2px solid var(--qd-red-dim);
+}
+
+/* 右立绘已上移到 html 背景层（见文件头），此处不再单独绘制。
+   内容卡的暗壳（--gd-color-bg 0.8）负责把她压到与整页一致的亮度。 */
+
+/* 人物占右侧 ~460px：正文长行收窄让位（代码块/表格仍占满） */
+html[data-theme="qi-dusk"] .markdown-text p,
+html[data-theme="qi-dusk"] .markdown-text li {
+  max-width: 66ch;
+}
+
+/* ============================================================
+   斜切角：消息卡 / 用户气泡 / 输入坞 / 主按钮
+   clip-path 会把 border 与阴影一起剪掉（qi-cel 实测），
+   所以切角件一律靠底色对比立形，不描边不加影。
+   ============================================================ */
+html[data-theme="qi-dusk"] .assistant-section .message-item__card {
+  /* 组件对助手卡是 padding:0 + 透明底（默认主题文字直接浮在页面上）；
+     本主题给了可见的暗面板底色，必须补内边距，否则文字顶到卡缘 */
+  padding: 12px 16px;
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+}
+html[data-theme="qi-dusk"] .user-section .message-item__card {
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+
+/* 输入坞：八角切角 + 金属双层框 + 斜纹装饰（纯 CSS，对照竞品 dock）。
+   结构：元素本体只负责 clip 大八角与占位；::after = 金属渐变外框（受光
+   上亮下暗）；::before = 内缩 2px 的玻璃层（上亮下暗）+ 左上红斜纹 +
+   左下白斜纹。两层都 z:-1（在元素背景之上、内容之下）；元素背景透明，
+   人物从玻璃透出。切角处 border 会被剪，所以不走 border，框线即
+   ::after 的可视边缘。 */
+/* 输入坞：八角切角 + 双层 clip-path 描边 + 素材背景（纯 CSS 版，C 阶段）
+   几何取自设计稿实测（参考图条带 1366x198 → 内容卡宽 ~1180，系数 0.86）：
+     - 角块 22px（32px 在 110px 高的坞上太大，收到 22）、亮线厚 5px
+     - 填充直接用「输入区域背景.png」：素材自身带两段明度曲线，
+       输入段 rgb(58,57,61) / 工具条段 rgb(112,112,110) / 顶缘内高光 rgb(95,96,99)
+   **高度一律不碰**：坞高由组件按文本行数实时计算，主题写死的 min-height 在
+   输入文字后就会被还回去，白增一条会抖动/失效的规则。两段分界也不按百分比，
+   而是直接绑在 .input-actions 上——高度怎么变都不会错位；实测 36/110 ≈ 33%，
+   与设计稿工具条段占 198px 里的 32% 基本吻合。
+   素材已按代码切片（tmp/qd-frame-compose.cjs）：把「输入区边框.png」整体等比缩到
+   坞高（110/180 ≈ 0.61，否则素材原线宽 15–21px 压在 110 高的坞上过粗），再切
+   4 角 + 4 直边共 8 张（img/dock-*.webp，角块 24px）。渲染时四角 1:1、四边只沿
+   自身轴拉伸 —— 所以 744 / 1238 宽、110 起任意高都不变形（合成验证见
+   tmp/qd-frame-{744x110,1238x110,744x180,620x110}.jpg）。
+   形状由素材自己定义（四角是不对称的斜切/楔形/双斜带），元素**不再做 clip-path**，
+   只把填充层裁成八角，免得矩形的场景板从斜切角外露出来。
+   注意 `.input-area` 的底色：父组件有一条
+   `[data-v-162b9450] .input-area { background: var(--gd-color-input-bg) !important }`，
+   普通声明压不住它、四角会露出它的方块底色，所以这里也 !important，并把
+   `[data-gd-slot="composer-card"]` 一并写上把权重抬到 (0,3,1) 确保赢。 */
+html[data-theme="qi-dusk"] .input-area[data-gd-slot="composer-card"],
+html[data-theme="qi-dusk"] .input-area {
+  --qd-slice: 24px;      /* 角块 / 直边条尺寸（切片时已等比缩放） */
+  /* 场景板的四角收角各不相等：素材四角形状本来就不同（TL/TR 斜切、BL 外角实心、
+     BR 双斜带），统一开角会在没画线的那一角多出一道斜边。角值按切片实测取：
+     - TL 4：左上素材自带斜切与角部点缀，板再切一道会出现第二道斜线，收到 4
+     - TR 4：右上素材是开角（顶行/右列在该 24px 内都没有线），同样只留极小收角
+     - BR 14：双斜带，收角跟着走
+     - BL 4：外角实心（alpha 254），几乎直角即可 */
+  --qd-plate-tl: 4px;
+  --qd-plate-tr: 4px;
+  --qd-plate-br: 14px;
+  --qd-plate-bl: 4px;
+  border-color: transparent;
+  /* 内边距按「亮线覆盖>15%」实测让开（24px 切片内，距各边的真实位置）：
+     顶 6–7 / 左 1–10 / 右 4–7 / 底 2–10 —— 之前按含暗金属体的整段取值留多了。
+     取亮线外沿 + 余量：顶 18（淡文字再压低 6px，避免贴住顶线）/ 右 12 / 底 15 / 左 14。
+     高度仍由内容驱动，没有写死。 */
+  padding: 18px 12px 15px 14px;
+  background: transparent !important;
+}
+/* 填充层（先画，在下）= 输入区域场景板；八角收角到边框内侧，接缝由上方描边盖住 */
+html[data-theme="qi-dusk"] .input-area::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url("img/qi-dusk-dock.webp") center / 100% 100% no-repeat;
+  clip-path: polygon(
+    var(--qd-plate-tl) 0, calc(100% - var(--qd-plate-tr)) 0,
+    100% var(--qd-plate-tr), 100% calc(100% - var(--qd-plate-br)),
+    calc(100% - var(--qd-plate-br)) 100%, var(--qd-plate-bl) 100%,
+    0 calc(100% - var(--qd-plate-bl)), 0 var(--qd-plate-tl)
+  );
+}
+/* 边框层（后画，在上）= 8 张切片。四角 1:1 贴四角，四边只拉伸自身轴；
+   最后一条是顶部红色斜纹 tab（设计稿 x≈11–14% 处） */
+html[data-theme="qi-dusk"] .input-area::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    /* 第 1 层 = 顶部红色斜纹 tab（列表越靠前画得越上，必须压在最上面） */
+    repeating-linear-gradient(115deg, rgba(177, 52, 64, 0.92) 0 3px, transparent 3px 8px),
+    url("img/dock-tl.webp"), url("img/dock-tr.webp"),
+    url("img/dock-bl.webp"), url("img/dock-br.webp"),
+    url("img/dock-t.webp"), url("img/dock-b.webp"),
+    url("img/dock-l.webp"), url("img/dock-r.webp");
+  background-size:
+    36px 10px,
+    var(--qd-slice) var(--qd-slice), var(--qd-slice) var(--qd-slice),
+    var(--qd-slice) var(--qd-slice), var(--qd-slice) var(--qd-slice),
+    calc(100% - var(--qd-slice) * 2) var(--qd-slice),
+    calc(100% - var(--qd-slice) * 2) var(--qd-slice),
+    var(--qd-slice) calc(100% - var(--qd-slice) * 2),
+    var(--qd-slice) calc(100% - var(--qd-slice) * 2);
+  background-position:
+    11% 0,
+    0 0, 100% 0, 0 100%, 100% 100%,
+    var(--qd-slice) 0, var(--qd-slice) 100%,
+    0 var(--qd-slice), 100% var(--qd-slice);
+  background-repeat: no-repeat;
+}
+/* 输入提示（placeholder）：组件用 --gd-color-text-disabled（本主题 #6e686c），
+   在场景板上只有 2.97:1 几乎看不清。这里单独提亮到 rgba(214,211,208,.62)
+   （合成后 ≈ #9a9795，对比 ≈ 4.8:1），只作用于输入坞，不动全局 disabled token */
+html[data-theme="qi-dusk"] .input-area .message-editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: rgba(214, 211, 208, 0.62);
+}
+
+/* 工具条行：不再用负边距（正是它把工具条顶到 24px 边框带下面、压住按钮和发送键）。
+   行自身的上下 6px 也去掉（那 6px 也是留白）；右侧再多收 20px，
+   把模型条与发送钮整体左移，避开右下角的双斜带点缀 */
+html[data-theme="qi-dusk"] .input-area .input-actions {
+  margin: 0;
+  padding: 0 20px 0 0;
+}
+/* 浮窗紧凑坞：组件自己把 padding 改成 8px !important，内容会压到描边下面，
+   所以这里按同一套「让开描边」的规则覆盖，并把切片缩到 16px（描边随之变细，
+   4 角仍是 45°）——紧凑坞小，用 24px 的框太重 */
+html[data-theme="qi-dusk"] .fcp-compact .input-area {
+  --qd-slice: 16px;
+  --qd-plate-tl: 3px;
+  --qd-plate-tr: 3px;
+  --qd-plate-br: 9px;
+  --qd-plate-bl: 3px;
+  padding: 9px 9px 11px 10px !important;
+}
+html[data-theme="qi-dusk"] .fcp-compact .input-actions {
+  margin: 0;
+  padding-right: 8px;
+}
+
+/* 发送键：红色光晕（设计稿是红色圆钮，基础样式本就是 50% 圆角，
+   这里不再切成方角——先前那版切角与设计稿冲突） */
+html[data-theme="qi-dusk"] .send-btn {
+  box-shadow: 0 0 14px rgba(210, 74, 82, 0.45), 0 0 4px rgba(210, 74, 82, 0.55);
+}
+
+/* 主按钮：右上小切角；实底件的描边显式给色（qi-cel：不写会糊 currentColor） */
+html[data-theme="qi-dusk"] .gd-button { border-radius: 2px }
+html[data-theme="qi-dusk"] .gd-button[data-variant="primary"] {
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+  border-color: rgba(0, 0, 0, 0.35);
+}
+html[data-theme="qi-dusk"] .gd-button[data-variant="secondary"] { border-color: rgba(0, 0, 0, 0.3) }
+
+/* ============================================================
+   选中态：行首红色装甲块 + 内嵌红条
+   ============================================================ */
+html[data-theme="qi-dusk"] .session-item {
+  border-radius: 3px;
+  padding-left: 18px;
+}
+html[data-theme="qi-dusk"] .session-item-active::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  margin-top: -4px;
+  width: 8px;
+  height: 8px;
+  background: var(--qd-red-bright);
+}
+html[data-theme="qi-dusk"] .nav-item-active,
+html[data-theme="qi-dusk"] .conversation-item-active {
+  box-shadow: inset 2px 0 0 var(--qd-red-bright);
+}
+
+/* ============================================================
+   终端块：块内控件点名给色（与暗面板共用 token，见上）
+   ============================================================ */
+html[data-theme="qi-dusk"] .markdown-text pre,
+html[data-theme="qi-dusk"] .code-scroll { color: #d8d4d0 }
+html[data-theme="qi-dusk"] .code-header {
+  background-color: #0a090c;
+  border-bottom: 1px solid rgba(210, 74, 82, 0.25);
+}
+html[data-theme="qi-dusk"] .code-language {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+html[data-theme="qi-dusk"] .code-language::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--qd-red-bright);
+}
+html[data-theme="qi-dusk"] .code-actions button { color: #8d878c }
+html[data-theme="qi-dusk"] .code-actions button:hover {
+  color: #e8e2da;
+  background-color: rgba(210, 74, 82, 0.14);
+}
+html[data-theme="qi-dusk"] .code-expand { color: #8d878c }
+
+/* 行内码在暗面板上：fill-tertiary 是终端黑，与面板底几乎同色会隐形，
+   改用亮 8% 的同族 chip（文字继承面板亮字）；终端黑只留给块级代码 */
+html[data-theme="qi-dusk"] .assistant-section .message-item__card :not(pre) > code {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+
+/* ============================================================
+   交互面：滚动条 / 选区 / 焦点 / 空状态 / 工作区面板
+   ============================================================ */
+html[data-theme="qi-dusk"] ::-webkit-scrollbar { width: 12px; height: 12px }
+html[data-theme="qi-dusk"] ::-webkit-scrollbar-track {
+  background-color: rgba(14, 12, 16, 0.6);
+}
+html[data-theme="qi-dusk"] ::-webkit-scrollbar-thumb {
+  background: #453e47;
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  border-radius: 2px;
+}
+html[data-theme="qi-dusk"] ::-webkit-scrollbar-thumb:hover { background: var(--qd-red) }
+
+html[data-theme="qi-dusk"] ::selection { background: var(--qd-red-deep); color: #f4f1ec }
+html[data-theme="qi-dusk"] :focus-visible {
+  outline: 2px solid var(--qd-red-bright);
+  outline-offset: 2px;
+}
+
+/* 空状态：三道红色斜切（纯 CSS，不注入文案） */
+html[data-theme="qi-dusk"] .gd-empty::after {
+  content: "";
+  display: block;
+  width: 56px;
+  height: 10px;
+  margin: 10px auto 0;
+  background: repeating-linear-gradient(115deg, var(--qd-red) 0 3px, transparent 3px 10px);
+  opacity: 0.55;
+}
+
+/* ---------- 亮色模式：只分档壳层透明度 ----------
+   同一套「暗底亮字」体系亮暗共用（上方全部规则无 dark 前缀）；
+   亮档的唯一区别是面板壳更透、背景画透出更多（用户实测 0.28 一档）。
+   系统亮暗切换走 html.dark：--gd-* 中引用这些变量的 token 自动跟随，
+   基础 token（文本/边框等）的亮暗由 style.css 的 html.dark 分支提供——
+   注意本主题的文本色是按暗底校准的，亮档下依旧成立（壳下始终是暗画）。 */
+html[data-theme="qi-dusk"]:not(.dark) {
+  --qd-shell: rgba(17, 15, 19, 0.28);       /* 亮档壳：更透 */
+  --qd-sidebar-bg: rgba(15, 13, 17, 0.32);  /* 亮档侧栏底 */
+  --qd-titlebar-bg: rgba(11, 10, 13, 0.42); /* 亮档标题栏底 */
+  /* 垫 10% 黑：左侧正文列不达标像素 13.2% → 9.7%，完全不可读(<3:1) 15.2% → 12.0%，
+     代价是全窗透出少约 10%（等效压暗 28% → 35.2%，暗档 68%） */
+  --qd-content-veil: linear-gradient(rgba(13, 11, 14, 0.1), rgba(13, 11, 14, 0.1));
+  /* 侧栏渐晕同步变浅：保住头部立绘可见度，列表区仍沉底 */
+  --qd-sidebar-veil: linear-gradient(180deg,
+    rgba(15, 13, 17, 0.12) 0%,
+    rgba(15, 13, 17, 0.26) 52%,
+    rgba(15, 13, 17, 0.55) 100%);
+}
+html[data-theme="qi-dusk"] .workspace-sidebar {
+  border-left: 1px solid var(--qd-line);
+}
